@@ -10,11 +10,14 @@ describe "an Active Record model which includes PgSearch" do
       t.text 'content'
       t.integer 'parent_model_id'
       t.integer 'importance'
+      t.hstore 'description'
+      t.jsonb 'translations'
     end
 
     model do
       include PgSearch::Model
       belongs_to :parent_model
+      serialize :description, ActiveRecord::Coders::Hstore if defined? ActiveRecord::Coders::Hstore
     end
   end
   with_model :ParentModel do
@@ -140,6 +143,32 @@ describe "an Active Record model which includes PgSearch" do
             }.to raise_error(ArgumentError, /against/)
           end
         end
+      end
+    end
+
+    context "when passed a hstore column" do
+      it "builds a scope" do
+        ModelWithPgSearch.pg_search_scope :search_en_description,
+                                          against: "description->'en'"
+
+        included = ModelWithPgSearch.create!(description: { en: 'description', de: 'Deskription' })
+        excluded = ModelWithPgSearch.create!(description: { de: 'Deskription' })
+
+        expect(ModelWithPgSearch.search_en_description('description')).to eq([included])
+        expect(ModelWithPgSearch.search_en_description('Deskription')).to be_empty
+      end
+    end
+
+    context "when passed a jsonb column" do
+      it "builds a scope" do
+        ModelWithPgSearch.pg_search_scope :search_en_description,
+                                          against: PgSearch::Configuration::JsonbColumn.new(:translations, 'en')
+
+        included = ModelWithPgSearch.create!(translations: { en: 'description', de: 'Deskription' })
+        excluded = ModelWithPgSearch.create!(translations: { de: 'Deskription' })
+
+        expect(ModelWithPgSearch.search_en_description('description')).to eq([included])
+        expect(ModelWithPgSearch.search_en_description('Deskription')).to be_empty
       end
     end
   end
